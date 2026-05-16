@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ board.name }} · WorldMeet</title>
+
+  <!-- D3 + TopoJSON -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+
+  <!-- Flatpickr date picker -->
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0a0f1e;
+      --surface: #131c2e;
+      --border:  #1e2d45;
+      --muted:   #334155;
+      --subtle:  #64748b;
+      --text:    #f1f5f9;
+      --green:   #4ade80;
+      --green-d: #22c55e;
+      --red:     #f87171;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: 52px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    .logo-area {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 1rem; font-weight: 700; white-space: nowrap;
+    }
+    .logo-area .green { color: var(--green); }
+    .board-name-display {
+      max-width: 280px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--text); font-size: 0.95rem;
+    }
+    .sep { color: var(--muted); margin: 0 2px; }
+
+    .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    .user-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 20px; padding: 5px 12px;
+      font-size: 0.82rem; color: var(--subtle);
+      cursor: pointer; transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .user-chip:hover { border-color: var(--green); color: var(--text); }
+    .user-chip .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); flex-shrink: 0;
+    }
+
+    .btn {
+      padding: 6px 14px; border-radius: 8px;
+      font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; border: none;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--subtle);
+    }
+    .btn-outline:hover { border-color: var(--green); color: var(--green); }
+    .btn-primary { background: var(--green); color: var(--bg); }
+    .btn-primary:hover { background: var(--green-d); }
+    .btn-danger {
+      background: transparent;
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+    .btn-danger:hover { background: var(--red); color: #fff; }
+
+    /* ── Map area ───────────────────────────────────── */
+    #map-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #map svg {
+      display: block;
+      width: 100%; height: 100%;
+    }
+    .country {
+      stroke: #0d1525;
+      stroke-width: 0.4;
+      cursor: pointer;
+      transition: filter 0.1s;
+    }
+    .country:hover {
+      filter: brightness(1.35);
+      stroke: #94a3b8;
+      stroke-width: 0.8;
+    }
+
+    /* ── Loading ────────────────────────────────────── */
+    #loading {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: var(--bg); z-index: 20; gap: 14px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { font-size: 0.85rem; color: var(--subtle); }
+
+    /* ── People sidebar ─────────────────────────────── */
+    #sidebar {
+      position: absolute; top: 14px; right: 14px;
+      background: rgba(19,28,46,0.95);
+      border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px;
+      min-width: 170px; max-height: 260px;
+      overflow-y: auto; font-size: 0.82rem;
+      backdrop-filter: blur(8px);
+    }
+    .sidebar-title {
+      font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--subtle);
+      margin-bottom: 10px; font-weight: 700;
+    }
+    .person-row {
+      display: flex; align-items: center; gap: 7px;
+      padding: 3px 0; color: #cbd5e1;
+    }
+    .person-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); flex-shrink: 0;
+    }
+    .you-tag { color: var(--muted); font-size: 0.72rem; margin-left: 2px; }
+
+    /* ── Legend ─────────────────────────────────────── */
+    #legend {
+      position: absolute; bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(19,28,46,0.9);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 0.75rem; color: var(--subtle);
+      backdrop-filter: blur(8px);
+    }
+    .legend-bar {
+      width: 90px; height: 8px; border-radius: 4px;
+      background: linear-gradient(to right, #bbf7d0, #14532d);
+    }
+
+    /* ── Tooltip ────────────────────────────────────── */
+    #tooltip {
+      position: fixed;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 15px;
+      font-size: 0.82rem; pointer-events: none;
+      opacity: 0; transition: opacity 0.12s;
+      max-width: 230px; z-index: 50;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #tooltip.show { opacity: 1; }
+    .tt-country {
+      font-weight: 700; font-size: 0.9rem;
+      color: var(--text); margin-bottom: 7px;
+    }
+    .tt-entry {
+      display: flex; flex-direction: column;
+      gap: 3px; margin-bottom: 3px;
+    }
+    .tt-name  { color: var(--green); font-weight: 600; }
+    .tt-dates { color: var(--subtle); font-size: 0.78rem; }
+    .tt-empty { color: var(--muted); font-style: italic; }
+
+    /* ── Name prompt ────────────────────────────────── */
+    #name-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .name-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 22px; padding: 40px 36px;
+      width: 400px; max-width: 90vw;
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .name-card .emoji { font-size: 3rem; margin-bottom: 16px; }
+    .name-card h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: 8px; }
+    .name-card p  { color: var(--subtle); font-size: 0.88rem; margin-bottom: 24px; line-height: 1.5; }
+
+    /* ── Country modal ──────────────────────────────── */
+    #modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 80; opacity: 0; pointer-events: none;
+      transition: opacity 0.18s;
+    }
+    #modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px; padding: 28px;
+      width: 380px; max-width: 90vw;
+      transform: translateY(12px);
+      transition: transform 0.18s;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+    #modal-overlay.show .modal { transform: translateY(0); }
+    .modal-head { margin-bottom: 20px; }
+    .modal-country { font-size: 1.1rem; font-weight: 800; }
+    .modal-sub     { color: var(--subtle); font-size: 0.83rem; margin-top: 2px; }
+
+    .fl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .flab {
+      font-size: 0.72rem; color: var(--subtle); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 6px; display: block;
+    }
+    .flab .opt { color: var(--green); font-size: 0.65rem; text-transform: none; letter-spacing: 0; }
+    .finp {
+      width: 100%;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 9px; padding: 9px 11px;
+      color: var(--text); font-size: 0.88rem;
+      outline: none; transition: border-color 0.15s;
+    }
+    .finp:focus { border-color: var(--green); }
+    .finp::placeholder { color: var(--muted); }
+
+    .modal-existing {
+      background: rgba(74,222,128,0.07);
+      border: 1px solid rgba(74,222,128,0.2);
+      border-radius: 9px; padding: 10px 12px;
+      font-size: 0.8rem; color: #86efac;
+      margin-bottom: 16px;
+    }
+    .others-section { margin-top: 16px; }
+    .others-title { font-size: 0.72rem; color: var(--subtle); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+    .other-person {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 0; font-size: 0.82rem; color: #cbd5e1;
+    }
+    .other-person .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+    .other-dates { color: var(--subtle); font-size: 0.77rem; }
+
+    .modal-actions {
+      display: flex; gap: 8px;
+      justify-content: flex-end; margin-top: 22px;
+    }
+
+    /* ── Toast ──────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 9px 18px;
+      font-size: 0.88rem; opacity: 0;
+      transition: all 0.25s; z-index: 200; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Flatpickr overrides ────────────────────────── */
+    .flatpickr-calendar { background: #131c2e !important; border-color: #1e2d45 !important; }
+    .flatpickr-day { color: #cbd5e1 !important; }
+    .flatpickr-day.selected { background: #4ade80 !important; border-color: #4ade80 !important; color: #0a0f1e !important; }
+    .flatpickr-day:hover { background: #1e2d45 !important; }
+    .flatpickr-month, .flatpickr-weekdays, .flatpickr-weekday { color: #94a3b8 !important; fill: #94a3b8 !important; }
+    .flatpickr-prev-month svg, .flatpickr-next-month svg { fill: #94a3b8 !important; }
+  </style>
+</head>
+<body>
+
+<!-- Name prompt overlay -->
+<div id="name-overlay">
+  <div class="name-card">
+    <div class="emoji">🌍</div>
+    <h2>Welcome to <span style="color:var(--green)">{{ board.name }}</span></h2>
+    <p>Enter your name so your friends can see who's going where.</p>
+    <input type="text" class="finp" id="name-input"
+           placeholder="Your name…" maxlength="30"
+           style="text-align:center;margin-bottom:14px;font-size:1rem;padding:12px">
+    <button class="btn btn-primary" id="name-submit" style="width:100%;padding:12px;font-size:0.95rem">
+      Let's go →
+    </button>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo-area">
+    🌍 <span class="green">World</span>Meet
+    <span class="sep">/</span>
+    <span class="board-name-display">{{ board.name }}</span>
+  </div>
+  <div class="header-right">
+    <span id="user-chip" class="user-chip">
+      <span class="dot"></span>
+      <span id="user-label">…</span>
+    </span>
+    <button class="btn btn-outline" id="copy-btn">📋 Share link</button>
+  </div>
+</header>
+
+<!-- Map -->
+<div id="map-wrap">
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Loading world map…</p>
+  </div>
+  <div id="map"></div>
+
+  <div id="sidebar">
+    <div class="sidebar-title">On this board</div>
+    <div id="people-list"><div style="color:var(--muted);font-size:0.78rem">No one yet</div></div>
+  </div>
+
+  <div id="legend">
+    <span>1 person</span>
+    <div class="legend-bar"></div>
+    <span>everyone</span>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip">
+  <div class="tt-country" id="tt-name"></div>
+  <div id="tt-body"></div>
+</div>
+
+<!-- Country modal -->
+<div id="modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-country" id="modal-cname">Country</div>
+      <div class="modal-sub">Add or update your visit</div>
+    </div>
+
+    <div id="modal-existing" class="modal-existing" style="display:none"></div>
+
+    <div class="fl">
+      <div>
+        <label class="flab">From <span class="opt">optional</span></label>
+        <input type="text" class="finp" id="dp-from" placeholder="Start date">
+      </div>
+      <div>
+        <label class="flab">To <span class="opt">optional</span></label>
+        <input type="text" class="finp" id="dp-to" placeholder="End date">
+      </div>
+    </div>
+
+    <div id="others-section" class="others-section" style="display:none">
+      <div class="others-title">Also visiting</div>
+      <div id="others-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-danger"   id="modal-remove" style="display:none">Remove</button>
+      <button class="btn btn-outline"  id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary"  id="modal-save">Save ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+/* ── Config ─────────────────────────────────────────────────────────────── */
+const BOARD_ID = "{{ board.id }}";
+const LS_KEY   = `wm_name_${BOARD_ID}`;
+
+/* ── Country name lookup (ISO 3166-1 numeric) ───────────────────────────── */
+const CN = {"4":"Afghanistan","8":"Albania","12":"Algeria","20":"Andorra","24":"Angola","28":"Antigua and Barbuda","32":"Argentina","36":"Australia","40":"Austria","31":"Azerbaijan","44":"Bahamas","48":"Bahrain","50":"Bangladesh","52":"Barbados","112":"Belarus","56":"Belgium","84":"Belize","204":"Benin","64":"Bhutan","68":"Bolivia","70":"Bosnia and Herzegovina","72":"Botswana","76":"Brazil","96":"Brunei","100":"Bulgaria","854":"Burkina Faso","108":"Burundi","116":"Cambodia","120":"Cameroon","124":"Canada","132":"Cape Verde","140":"Central African Republic","148":"Chad","152":"Chile","156":"China","170":"Colombia","174":"Comoros","178":"Republic of Congo","180":"DR Congo","188":"Costa Rica","191":"Croatia","192":"Cuba","196":"Cyprus","203":"Czech Republic","208":"Denmark","262":"Djibouti","214":"Dominican Republic","218":"Ecuador","818":"Egypt","222":"El Salvador","226":"Equatorial Guinea","232":"Eritrea","233":"Estonia","231":"Ethiopia","242":"Fiji","246":"Finland","250":"France","266":"Gabon","270":"Gambia","268":"Georgia","276":"Germany","288":"Ghana","300":"Greece","320":"Guatemala","324":"Guinea","624":"Guinea-Bissau","328":"Guyana","332":"Haiti","340":"Honduras","348":"Hungary","356":"India","360":"Indonesia","364":"Iran","368":"Iraq","372":"Ireland","376":"Israel","380":"Italy","384":"Ivory Coast","388":"Jamaica","392":"Japan","400":"Jordan","398":"Kazakhstan","404":"Kenya","408":"North Korea","410":"South Korea","414":"Kuwait","417":"Kyrgyzstan","418":"Laos","428":"Latvia","422":"Lebanon","426":"Lesotho","430":"Liberia","434":"Libya","438":"Liechtenstein","440":"Lithuania","442":"Luxembourg","450":"Madagascar","454":"Malawi","458":"Malaysia","462":"Maldives","466":"Mali","470":"Malta","478":"Mauritania","480":"Mauritius","484":"Mexico","496":"Mongolia","499":"Montenegro","504":"Morocco","508":"Mozambique","516":"Namibia","524":"Nepal","528":"Netherlands","554":"New Zealand","558":"Nicaragua","562":"Niger","566":"Nigeria","578":"Norway","512":"Oman","586":"Pakistan","591":"Panama","598":"Papua New Guinea","600":"Paraguay","604":"Peru","608":"Philippines","616":"Poland","620":"Portugal","634":"Qatar","642":"Romania","643":"Russia","646":"Rwanda","682":"Saudi Arabia","686":"Senegal","694":"Sierra Leone","703":"Slovakia","705":"Slovenia","90":"Solomon Islands","706":"Somalia","710":"South Africa","728":"South Sudan","724":"Spain","144":"Sri Lanka","729":"Sudan","740":"Suriname","748":"Eswatini","752":"Sweden","756":"Switzerland","760":"Syria","762":"Tajikistan","834":"Tanzania","764":"Thailand","768":"Togo","780":"Trinidad and Tobago","788":"Tunisia","792":"Turkey","795":"Turkmenistan","800":"Uganda","804":"Ukraine","784":"United Arab Emirates","826":"United Kingdom","840":"United States","858":"Uruguay","860":"Uzbekistan","862":"Venezuela","704":"Vietnam","887":"Yemen","894":"Zambia","716":"Zimbabwe","304":"Greenland","158":"Taiwan","275":"Palestine","688":"Serbia","807":"North Macedonia","498":"Moldova","492":"Monaco","674":"San Marino","10":"Antarctica","258":"French Polynesia","540":"New Caledonia","630":"Puerto Rico","312":"Guadeloupe","474":"Martinique","254":"French Guiana","638":"Réunion"};
+
+/* ── State ──────────────────────────────────────────────────────────────── */
+let me       = null;   // current user name
+let entries  = {};     // { countryId: [{person, date_from, date_to}] }
+let selId    = null;   // currently selected country id
+let paths    = null;   // d3 selection of country paths
+let fpFrom, fpTo;
+
+/* ── Name prompt ────────────────────────────────────────────────────────── */
+function initUser() {
+  const stored = localStorage.getItem(LS_KEY);
+  if (stored) {
+    me = stored;
+    document.getElementById('name-overlay').style.display = 'none';
+    document.getElementById('user-label').textContent = me;
+  }
+}
+
+document.getElementById('name-submit').addEventListener('click', () => {
+  const v = document.getElementById('name-input').value.trim();
+  if (!v) return;
+  me = v;
+  localStorage.setItem(LS_KEY, me);
+  document.getElementById('name-overlay').style.display = 'none';
+  document.getElementById('user-label').textContent = me;
+});
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('name-submit').click();
+});
+document.getElementById('user-chip').addEventListener('click', () => {
+  const n = prompt('Change your name:', me);
+  if (n?.trim()) {
+    me = n.trim();
+    localStorage.setItem(LS_KEY, me);
+    document.getElementById('user-label').textContent = me;
+    updatePeople();
+  }
+});
+
+/* ── Copy link ──────────────────────────────────────────────────────────── */
+document.getElementById('copy-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(location.href);
+  toast('Link copied! Send it to your friends 🎉');
+});
+
+/* ── API ────────────────────────────────────────────────────────────────── */
+async function loadEntries() {
+  const res = await fetch(`/api/board/${BOARD_ID}/entries`);
+  entries = await res.json();
+  redrawMap();
+  updatePeople();
+}
+
+async function saveEntry(countryId, dateFrom, dateTo) {
+  await fetch(`/api/board/${BOARD_ID}/add`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ person_name: me, country_id: countryId, date_from: dateFrom, date_to: dateTo })
+  });
+  await loadEntries();
+}
+
+async function deleteEntry(countryId) {
+  await fetch(`/api/board/${BOARD_ID}/remove`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ person_name: me, country_id: countryId })
+  });
+  await loadEntries();
+}
+
+/* ── Map ────────────────────────────────────────────────────────────────── */
+const W = 960, H = 500;
+
+async function initMap() {
+  const world = await d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+  document.getElementById('loading').style.display = 'none';
+
+  const features = topojson.feature(world, world.objects.countries).features;
+  const borders  = topojson.mesh(world, world.objects.countries, (a, b) => a !== b);
+
+  const proj = d3.geoNaturalEarth1()
+    .scale(W / 2 / Math.PI)
+    .translate([W / 2, H / 2]);
+
+  const geo = d3.geoPath().projection(proj);
+
+  const svg = d3.select('#map').append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet')
+    .style('width', '100%').style('height', '100%');
+
+  // Ocean fill
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#0d1827');
+
+  // Graticule
+  svg.append('path')
+    .datum(d3.geoGraticule()())
+    .attr('fill', 'none')
+    .attr('stroke', '#111e30')
+    .attr('stroke-width', 0.4)
+    .attr('d', geo);
+
+  // Countries
+  paths = svg.selectAll('.country')
+    .data(features).join('path')
+    .attr('class', 'country')
+    .attr('d', geo)
+    .attr('fill', d => colorFor(String(d.id)))
+    .on('click',      (ev, d) => openModal(ev, d))
+    .on('mousemove',  (ev, d) => showTip(ev, d))
+    .on('mouseleave', ()      => hideTip());
+
+  // Borders
+  svg.append('path').datum(borders)
+    .attr('fill', 'none')
+    .attr('stroke', '#0a0f1e')
+    .attr('stroke-width', 0.5)
+    .attr('d', geo);
+
+  await loadEntries();
+  setInterval(loadEntries, 12000); // live refresh every 12 s
+}
+
+function countryName(id) {
+  return CN[id] || `Unknown (${id})`;
+}
+
+function colorFor(id) {
+  const list = entries[id];
+  if (!list || list.length === 0) return '#1a2b42';
+
+  // Unique people across the whole board → denominator for intensity
+  const totalPeople = new Set(Object.values(entries).flatMap(v => v.map(e => e.person))).size || 1;
+  const t = Math.min(list.length / totalPeople, 1);
+  // Interpolate: very light green → deep forest green
+  return d3.interpolateRgb('#bbf7d0', '#14532d')(0.2 + t * 0.8);
+}
+
+function redrawMap() {
+  if (!paths) return;
+  paths.attr('fill', d => colorFor(String(d.id)));
+}
+
+/* ── Tooltip ────────────────────────────────────────────────────────────── */
+const tip = document.getElementById('tooltip');
+
+function showTip(ev, d) {
+  const id   = String(d.id);
+  const list = entries[id] || [];
+  document.getElementById('tt-name').textContent = countryName(id);
+
+  if (list.length === 0) {
+    document.getElementById('tt-body').innerHTML = '<div class="tt-empty">No one here yet — click to add yourself!</div>';
+  } else {
+    document.getElementById('tt-body').innerHTML = list.map(e => {
+      let dates = '';
+      if (e.date_from && e.date_to)  dates = fmt(e.date_from) + ' – ' + fmt(e.date_to);
+      else if (e.date_from)          dates = 'From ' + fmt(e.date_from);
+      else if (e.date_to)            dates = 'Until ' + fmt(e.date_to);
+      return `<div class="tt-entry">
+        <span class="tt-name">${esc(e.person)}</span>
+        ${dates ? `<span class="tt-dates">${dates}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  tip.classList.add('show');
+  posTip(ev);
+}
+
+function hideTip() { tip.classList.remove('show'); }
+
+function posTip(ev) {
+  const x = ev.clientX + 14;
+  const y = ev.clientY - 12;
+  tip.style.left = Math.min(x, window.innerWidth  - 250) + 'px';
+  tip.style.top  = Math.min(y, window.innerHeight - 160) + 'px';
+}
+document.addEventListener('mousemove', ev => { if (tip.classList.contains('show')) posTip(ev); });
+
+/* ── Modal ──────────────────────────────────────────────────────────────── */
+const overlay = document.getElementById('modal-overlay');
+
+fpFrom = flatpickr('#dp-from', { dateFormat: 'M j, Y', disableMobile: false });
+fpTo   = flatpickr('#dp-to',   { dateFormat: 'M j, Y', disableMobile: false });
+
+function openModal(ev, d) {
+  if (!me) { toast('Enter your name first!'); return; }
+  ev.stopPropagation();
+  selId = String(d.id);
+
+  document.getElementById('modal-cname').textContent = countryName(selId);
+
+  const list    = entries[selId] || [];
+  const myEntry = list.find(e => e.person === me);
+  const others  = list.filter(e => e.person !== me);
+
+  // My existing entry
+  const existBox = document.getElementById('modal-existing');
+  if (myEntry) {
+    let msg = '✓ You already have this country marked.';
+    if (myEntry.date_from || myEntry.date_to) {
+      msg += ` (${[myEntry.date_from && fmt(myEntry.date_from), myEntry.date_to && fmt(myEntry.date_to)].filter(Boolean).join(' – ')})`;
+    }
+    existBox.textContent = msg;
+    existBox.style.display = 'block';
+    document.getElementById('modal-remove').style.display = 'inline-block';
+    if (myEntry.date_from) fpFrom.setDate(myEntry.date_from);
+    if (myEntry.date_to)   fpTo.setDate(myEntry.date_to);
+  } else {
+    existBox.style.display = 'none';
+    document.getElementById('modal-remove').style.display = 'none';
+    fpFrom.clear(); fpTo.clear();
+  }
+
+  // Others visiting
+  const othSec  = document.getElementById('others-section');
+  const othList = document.getElementById('others-list');
+  if (others.length > 0) {
+    othSec.style.display = 'block';
+    othList.innerHTML = others.map(e => {
+      let dates = '';
+      if (e.date_from && e.date_to) dates = fmt(e.date_from) + ' – ' + fmt(e.date_to);
+      else if (e.date_from)         dates = 'From ' + fmt(e.date_from);
+      else if (e.date_to)           dates = 'Until ' + fmt(e.date_to);
+      return `<div class="other-person">
+        <span class="dot"></span>
+        <span>${esc(e.person)}</span>
+        ${dates ? `<span class="other-dates">· ${dates}</span>` : ''}
+      </div>`;
+    }).join('');
+  } else {
+    othSec.style.display = 'none';
+  }
+
+  overlay.classList.add('show');
+}
+
+function closeModal() { overlay.classList.remove('show'); selId = null; }
+
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+overlay.addEventListener('click', ev => { if (ev.target === overlay) closeModal(); });
+
+document.getElementById('modal-save').addEventListener('click', async () => {
+  const df = fpFrom.selectedDates[0] ? fpFrom.formatDate(fpFrom.selectedDates[0], 'Y-m-d') : null;
+  const dt = fpTo.selectedDates[0]   ? fpTo.formatDate(fpTo.selectedDates[0],   'Y-m-d') : null;
+  await saveEntry(selId, df, dt);
+  closeModal();
+  toast('Saved! ✓');
+});
+
+document.getElementById('modal-remove').addEventListener('click', async () => {
+  await deleteEntry(selId);
+  closeModal();
+  toast('Removed');
+});
+
+/* ── People list ────────────────────────────────────────────────────────── */
+function updatePeople() {
+  const people = [...new Set(Object.values(entries).flatMap(v => v.map(e => e.person)))];
+  const el = document.getElementById('people-list');
+  if (people.length === 0) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.78rem">No one yet</div>';
+    return;
+  }
+  el.innerHTML = people.map(p =>
+    `<div class="person-row">
+       <div class="person-dot"></div>
+       ${esc(p)}${p === me ? '<span class="you-tag">(you)</span>' : ''}
+     </div>`
+  ).join('');
+}
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ── Helpers ────────────────────────────────────────────────────────────── */
+function fmt(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+}
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Boot ───────────────────────────────────────────────────────────────── */
+initUser();
+initMap();
+</script>
+</body>
+</html>

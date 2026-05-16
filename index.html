@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorldMeet — Travel plans with friends</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0f1e;
+      color: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background-image: radial-gradient(ellipse at 20% 50%, rgba(74,222,128,0.06) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 20%, rgba(56,189,248,0.06) 0%, transparent 50%);
+    }
+    .card {
+      background: #131c2e;
+      border: 1px solid #1e2d45;
+      border-radius: 28px;
+      padding: 52px 44px;
+      width: 460px;
+      max-width: 100%;
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+    .logo { font-size: 4rem; margin-bottom: 18px; line-height: 1; }
+    h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+    h1 .green { color: #4ade80; }
+    .tagline { color: #64748b; margin-bottom: 40px; font-size: 0.95rem; line-height: 1.6; }
+
+    .form-label {
+      font-size: 0.75rem; color: #94a3b8; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 8px; display: block; text-align: left;
+    }
+    .form-input {
+      width: 100%;
+      background: #0a0f1e;
+      border: 1px solid #1e2d45;
+      border-radius: 12px;
+      padding: 13px 16px;
+      color: #f1f5f9;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      margin-bottom: 16px;
+    }
+    .form-input:focus {
+      border-color: #4ade80;
+      box-shadow: 0 0 0 3px rgba(74,222,128,0.1);
+    }
+    .form-input::placeholder { color: #334155; }
+    .btn-create {
+      width: 100%;
+      background: #4ade80;
+      color: #0a0f1e;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: -0.2px;
+    }
+    .btn-create:hover { background: #22c55e; }
+    .btn-create:active { transform: scale(0.98); }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e2d45;
+      margin: 36px 0 28px;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    .step-icon { font-size: 1.6rem; margin-bottom: 8px; }
+    .step-text { font-size: 0.76rem; color: #475569; line-height: 1.5; }
+
+    .footer {
+      margin-top: 28px;
+      font-size: 0.78rem;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🌍</div>
+    <h1><span class="green">World</span>Meet</h1>
+    <p class="tagline">
+      Like when2meet, but for countries.<br>
+      Mark where you're going — see where your friends are.
+    </p>
+
+    <form method="POST" action="/create">
+      <label class="form-label" for="board-name">Name your board</label>
+      <input
+        type="text" class="form-input" id="board-name" name="name"
+        placeholder="e.g. Europe Summer 2025, Asia Trip…"
+        maxlength="60" required autofocus
+      >
+      <button type="submit" class="btn-create">Create board →</button>
+    </form>
+
+    <hr class="divider">
+
+    <div class="steps">
+      <div>
+        <div class="step-icon">✏️</div>
+        <div class="step-text">Create a board & share the link</div>
+      </div>
+      <div>
+        <div class="step-icon">🗺️</div>
+        <div class="step-text">Click countries with optional dates</div>
+      </div>
+      <div>
+        <div class="step-icon">✈️</div>
+        <div class="step-text">Hover to see who's where & when</div>
+      </div>
+    </div>
+
+    <p class="footer">Free & open source · No sign-up needed</p>
+  </div>
+</body>
+</html>
